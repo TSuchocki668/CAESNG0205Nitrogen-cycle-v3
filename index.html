@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: transparent; }
+
+#diagram-container {
+  position: relative;
+  width: 100%;
+  max-width: 680px;
+  display: block;
+  margin: 0 auto;
+}
+svg { display: block; width: 100%; height: auto; }
+
+.clickable { cursor: pointer; }
+.node-rect { transition: filter 0.15s ease; }
+.clickable:hover .node-rect {
+  filter: brightness(1.14) drop-shadow(0 0 7px rgba(0,0,0,0.28));
+}
+.arrow-line { transition: opacity 0.15s ease; }
+.clickable:hover .arrow-line { opacity: 0.65; }
+.arrow-hit { fill: none; stroke: transparent; stroke-width: 18; }
+
+#popup {
+  display: none;
+  position: absolute;
+  width: 262px;
+  background: white;
+  border-radius: 9px;
+  box-shadow: 0 5px 24px rgba(0,0,0,0.15), 0 1px 5px rgba(0,0,0,0.07);
+  z-index: 100;
+  font-family: Georgia, 'Times New Roman', serif;
+  overflow: hidden;
+  animation: popIn 0.15s ease;
+}
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+#popup-bar { height: 7px; }
+#popup-inner { padding: 13px 14px 15px; }
+#popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+#popup-title {
+  font-weight: bold;
+  font-size: 12.5px;
+  color: #1a1a1a;
+  line-height: 1.35;
+}
+#popup-close {
+  cursor: pointer;
+  font-size: 20px;
+  color: #bbb;
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+}
+#popup-close:hover { color: #555; }
+#popup-content {
+  font-size: 11.5px;
+  color: #454545;
+  line-height: 1.68;
+}
+</style>
+</head>
+<body>
+<div id="diagram-container">
+
+<!--
+  ROW POSITIONS (top of each node):
+  Row 1  Atmosphere          y = 88   (bottom y = 136)
+  Row 2  Bacteria            y = 248  (bottom y = 300)  gap from Row1 = 112px
+  Row 3  N Pool              y = 390  (bottom y = 438)  gap from Row2 = 90px
+  Row 4  Plants / Animals    y = 500  (bottom y = 548)  gap from Row3 = 62px
+  Row 5  Decomposers / Deni  y = 608  (bottom y = 656)  gap from Row4 = 60px
+  Legend                     y = 680
+  Tagline                    y = 756
+  ViewBox height             = 790
+-->
+
+<svg id="nitrogen-svg" viewBox="0 0 680 790" xmlns="http://www.w3.org/2000/svg" font-family="Georgia, 'Times New Roman', serif">
+<defs>
+  <marker id="mT" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#2A9D8F"/>
+  </marker>
+  <marker id="mA" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#C8914A"/>
+  </marker>
+
+  <!-- fixLeft: reversed — Soil Fixers top → Atm bottom-left (uphill = readable) -->
+  <path id="fixLeft"   d="M 172 248 L 272 136"/>
+  <!-- fixRight: forward — Atm bottom-right → Ocean Fixers top (downhill-right = readable) -->
+  <path id="fixRight"  d="M 408 136 L 508 248"/>
+  <!-- nitLeft: Soil Fixers bottom → N Pool left (downhill-right = readable) -->
+  <path id="nitLeft"   d="M 162 300 L 268 390"/>
+  <!-- nitRight: reversed — N Pool right → Ocean Fixers bottom (uphill-right = readable) -->
+  <path id="nitRight"  d="M 412 390 L 518 300"/>
+  <!-- nToPlants: reversed — Plants top-center → N Pool left-center (uphill right = readable) -->
+  <path id="nToPlants" d="M 105 500 L 215 414"/>
+
+  <!-- decompUp: Decomposers right → N Pool right (uphill-right = readable) -->
+  <path id="decompUp"  d="M 407 632 L 462 438"/>
+  <!-- denitrifyPath: N Pool right → Denitrifiers top (downhill-right = readable) -->
+  <path id="denitrifyPath" d="M 462 438 L 510 608"/>
+  <!-- deniArc: reversed arc — Atm right → Denitrifiers right (for inside label) -->
+  <path id="deniArc"   d="M 462 136 C 655 185 655 510 642 624"/>
+</defs>
+
+<!-- Background -->
+<rect width="680" height="790" fill="#FAFAF7"/>
+
+<!-- Atmosphere tint -->
+<rect x="0" y="80" width="680" height="165" fill="#EAF3F8" opacity="0.25"/>
+
+<!-- Biological loop highlight -->
+<rect x="38" y="490" width="450" height="184" rx="16" fill="#E8F6F4" opacity="0.45"/>
+
+<!-- Critical step warm zones -->
+<rect x="5"   y="236" width="225" height="72" rx="12" fill="#FBF0E2" opacity="0.70"/>
+<rect x="450" y="236" width="225" height="72" rx="12" fill="#FBF0E2" opacity="0.70"/>
+<rect x="478" y="596" width="168" height="58" rx="12" fill="#FBF0E2" opacity="0.70"/>
+
+<!-- ==============================
+     TITLE
+     ============================== -->
+<text x="340" y="34" text-anchor="middle" font-size="18" font-weight="bold" fill="#2C2C2C">The Nitrogen Cycle</text>
+<text x="340" y="54" text-anchor="middle" font-size="12" font-style="italic" fill="#555">Nitrogen cycles through the atmosphere and living things via two critical bacterial transformation steps</text>
+<text x="340" y="71" text-anchor="middle" font-size="9" font-style="italic" fill="#aaa">Click any node or arrow to learn more</text>
+
+<!-- Zone labels -->
+<text x="117"  y="234" text-anchor="middle" font-size="9" font-weight="bold" fill="#C8914A" letter-spacing="0.5">NITROGEN FIXATION</text>
+<text x="562"  y="234" text-anchor="middle" font-size="9" font-weight="bold" fill="#C8914A" letter-spacing="0.5">NITROGEN FIXATION</text>
+<text x="569"  y="594" text-anchor="middle" font-size="9" font-weight="bold" fill="#C8914A" letter-spacing="0.5">DENITRIFICATION</text>
+<text x="263" y="488" text-anchor="middle" font-size="9" font-weight="bold" fill="#2A9D8F" letter-spacing="0.5">BIOLOGICAL CYCLE</text>
+
+<!-- ===================== NODES ===================== -->
+
+<!-- N₂ in Atmosphere — y=88 -->
+<g id="node-atmosphere" class="clickable" onclick="showPopup('node-atmosphere', event)">
+  <rect x="215" y="88" width="250" height="48" rx="8" fill="#5B8FA8" class="node-rect"/>
+  <text x="340" y="108" text-anchor="middle" font-size="13" font-weight="bold" fill="white">N&#x2082; in Atmosphere</text>
+  <text x="340" y="125" text-anchor="middle" font-size="10" font-style="italic" fill="#D4EAF5">78% of air, almost all unusable</text>
+</g>
+
+<!-- Soil & Root Nodule Bacteria — y=248 -->
+<g id="node-soilfixers" class="clickable" onclick="showPopup('node-soilfixers', event)">
+  <rect x="5" y="248" width="225" height="52" rx="8" fill="#C8914A" class="node-rect"/>
+  <text x="117" y="269" text-anchor="middle" font-size="12" font-weight="bold" fill="white">Nitrogen-Fixing Bacteria</text>
+  <text x="117" y="288" text-anchor="middle" font-size="10" font-style="italic" fill="white">Soil &amp; root nodules</text>
+</g>
+
+<!-- Ocean Cyanobacteria — y=248 -->
+<g id="node-cyanobacteria" class="clickable" onclick="showPopup('node-cyanobacteria', event)">
+  <rect x="450" y="248" width="225" height="52" rx="8" fill="#C8914A" class="node-rect"/>
+  <text x="562" y="269" text-anchor="middle" font-size="12" font-weight="bold" fill="white">Nitrogen-Fixing Bacteria</text>
+  <text x="562" y="288" text-anchor="middle" font-size="10" font-style="italic" fill="white">Ocean cyanobacteria</text>
+</g>
+
+<!-- Ammonium / Nitrate pool — y=390 -->
+<g id="node-npool" class="clickable" onclick="showPopup('node-npool', event)">
+  <rect x="215" y="390" width="250" height="48" rx="8" fill="#7A9A5C" class="node-rect"/>
+  <text x="340" y="410" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Ammonium &amp; Nitrate</text>
+  <text x="340" y="427" text-anchor="middle" font-size="10" font-style="italic" fill="white">NH&#x2084;&#x207A; / NO&#x2083;&#x207B; — soil available</text>
+</g>
+
+<!-- Plants — y=500 -->
+<g id="node-plants" class="clickable" onclick="showPopup('node-plants', event)">
+  <rect x="42" y="500" width="126" height="48" rx="8" fill="#2A9D8F" class="node-rect"/>
+  <text x="105" y="520" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Plants</text>
+  <text x="105" y="537" text-anchor="middle" font-size="10" font-style="italic" fill="white">proteins, DNA, chlorophyll</text>
+</g>
+
+<!-- Animals — y=500, moved left to clear Mineralization arrow text -->
+<g id="node-animals" class="clickable" onclick="showPopup('node-animals', event)">
+  <rect x="258" y="500" width="122" height="48" rx="8" fill="#2A9D8F" class="node-rect"/>
+  <text x="319" y="520" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Animals</text>
+  <text x="319" y="537" text-anchor="middle" font-size="10" font-style="italic" fill="white">proteins, urea</text>
+</g>
+
+<!-- Decomposers — y=608, centered on N₂ Atmosphere (x=273) -->
+<g id="node-decomposers" class="clickable" onclick="showPopup('node-decomposers', event)">
+  <rect x="273" y="608" width="134" height="48" rx="8" fill="#2A9D8F" class="node-rect"/>
+  <text x="340" y="628" text-anchor="middle" font-size="13" font-weight="bold" fill="white">Decomposers</text>
+  <text x="340" y="645" text-anchor="middle" font-size="10" font-style="italic" fill="white">bacteria and fungi</text>
+</g>
+
+<!-- Denitrifying Bacteria — y=608, w=160 (2/3 of original), centered on Ocean Cyanobacteria x=562 -->
+<g id="node-denitrifiers" class="clickable" onclick="showPopup('node-denitrifiers', event)">
+  <rect x="482" y="608" width="160" height="32" rx="8" fill="#C8914A" class="node-rect"/>
+  <text x="562" y="621" text-anchor="middle" font-size="11" font-weight="bold" fill="white">Denitrifying Bacteria</text>
+  <text x="562" y="634" text-anchor="middle" font-size="9" font-style="italic" fill="white">NO&#x2083;&#x207B; → N&#x2082;</text>
+</g>
+
+<!-- ===================== ARROWS ===================== -->
+
+<!-- N₂ Atm → Soil Fixers  — amber fixation, ~150px long -->
+<g id="arrow-fix-soil" class="clickable" onclick="showPopup('arrow-fixation', event)">
+  <path class="arrow-line" d="M 272 136 L 172 248" stroke="#C8914A" stroke-width="2.5" fill="none" marker-end="url(#mA)"/>
+  <path class="arrow-hit"  d="M 272 136 L 172 248"/>
+  <text font-size="10" font-style="italic" fill="#C8914A" dy="-7" text-anchor="middle">
+    <textPath href="#fixLeft" startOffset="50%">Nitrogen fixation</textPath>
+  </text>
+  <text font-size="9" fill="#C8914A" dy="10" text-anchor="middle">
+    <textPath href="#fixLeft" startOffset="50%">N&#x2082; → NH&#x2083;</textPath>
+  </text>
+</g>
+
+<!-- N₂ Atm → Ocean Fixers — amber fixation, ~150px long -->
+<g id="arrow-fix-ocean" class="clickable" onclick="showPopup('arrow-fixation', event)">
+  <path class="arrow-line" d="M 408 136 L 508 248" stroke="#C8914A" stroke-width="2.5" fill="none" marker-end="url(#mA)"/>
+  <path class="arrow-hit"  d="M 408 136 L 508 248"/>
+  <text font-size="10" font-style="italic" fill="#C8914A" dy="-7" text-anchor="middle">
+    <textPath href="#fixRight" startOffset="50%">Nitrogen fixation</textPath>
+  </text>
+  <text font-size="9" fill="#C8914A" dy="10" text-anchor="middle">
+    <textPath href="#fixRight" startOffset="50%">N&#x2082; → NH&#x2083;</textPath>
+  </text>
+</g>
+
+<!-- Soil Fixers → N Pool — nitrification, ~139px long -->
+<g id="arrow-nitrify-soil" class="clickable" onclick="showPopup('arrow-nitrification', event)">
+  <path class="arrow-line" d="M 162 300 L 268 390" stroke="#2A9D8F" stroke-width="2.5" fill="none" marker-end="url(#mT)"/>
+  <path class="arrow-hit"  d="M 162 300 L 268 390"/>
+  <text font-size="10" font-style="italic" fill="#2A9D8F" dy="-7" text-anchor="middle">
+    <textPath href="#nitLeft" startOffset="50%">Nitrification</textPath>
+  </text>
+  <text font-size="9" fill="#2A9D8F" dy="10" text-anchor="middle">
+    <textPath href="#nitLeft" startOffset="50%">NH&#x2083; → NH&#x2084;&#x207A;/NO&#x2083;&#x207B;</textPath>
+  </text>
+</g>
+
+<!-- Ocean Fixers → N Pool — nitrification, ~139px long -->
+<g id="arrow-nitrify-ocean" class="clickable" onclick="showPopup('arrow-nitrification', event)">
+  <path class="arrow-line" d="M 518 300 L 412 390" stroke="#2A9D8F" stroke-width="2.5" fill="none" marker-end="url(#mT)"/>
+  <path class="arrow-hit"  d="M 518 300 L 412 390"/>
+  <text font-size="10" font-style="italic" fill="#2A9D8F" dy="-7" text-anchor="middle">
+    <textPath href="#nitRight" startOffset="50%">Nitrification</textPath>
+  </text>
+  <text font-size="9" fill="#2A9D8F" dy="10" text-anchor="middle">
+    <textPath href="#nitRight" startOffset="50%">NH&#x2083; → NH&#x2084;&#x207A;/NO&#x2083;&#x207B;</textPath>
+  </text>
+</g>
+
+<!-- N Pool → Plants — plant uptake -->
+<g id="arrow-plantuptake" class="clickable" onclick="showPopup('arrow-plantuptake', event)">
+  <path class="arrow-line" d="M 215 414 L 105 500" stroke="#2A9D8F" stroke-width="2.5" fill="none" marker-end="url(#mT)"/>
+  <path class="arrow-hit"  d="M 215 414 L 105 500"/>
+  <text font-size="10" font-style="italic" fill="#2A9D8F" dy="-7" text-anchor="middle">
+    <textPath href="#nToPlants" startOffset="50%">Plant uptake</textPath>
+  </text>
+  <text font-size="9" fill="#2A9D8F" dy="10" text-anchor="middle">
+    <textPath href="#nToPlants" startOffset="50%">hours to days</textPath>
+  </text>
+</g>
+
+<!-- Plants → Animals — consumption, shortened -->
+<g id="arrow-consumption" class="clickable" onclick="showPopup('arrow-consumption', event)">
+  <path class="arrow-line" d="M 168 524 L 258 524" stroke="#2A9D8F" stroke-width="2.5" fill="none" marker-end="url(#mT)"/>
+  <path class="arrow-hit"  d="M 168 524 L 258 524"/>
+  <text x="213" y="514" text-anchor="middle" font-size="10" font-style="italic" fill="#2A9D8F">Consumption</text>
+</g>
+
+<!-- Death: Plants → Decomposers AND Animals → Decomposers -->
+<g id="arrow-death" class="clickable" onclick="showPopup('arrow-death', event)">
+  <path class="arrow-line" d="M 105 548 L 273 632" stroke="#2A9D8F" stroke-width="2.5" fill="none" marker-end="url(#mT)"/>
+  <path class="arrow-hit"  d="M 105 548 L 273 632"/>
+  <path class="arrow-line" d="M 319 548 L 345 608" stroke="#2A9D8F" stroke-width="2.5" fill="none" marker-end="url(#mT)"/>
+  <path class="arrow-hit"  d="M 319 548 L 345 608"/>
+  <text x="232" y="573" text-anchor="middle" font-size="10" font-style="italic" fill="#2A9D8F">Death</text>
+  <text x="232" y="585" text-anchor="middle" font-size="10" font-style="italic" fill="#2A9D8F">and excretion</text>
+</g>
+
+<!-- Decomposers → N Pool — mineralization -->
+<g id="arrow-mineralization" class="clickable" onclick="showPopup('arrow-mineralization', event)">
+  <path class="arrow-line" d="M 407 632 L 462 438" stroke="#2A9D8F" stroke-width="2.5" fill="none" marker-end="url(#mT)"/>
+  <path class="arrow-hit"  d="M 407 632 L 462 438"/>
+  <text font-size="10" font-style="italic" fill="#2A9D8F" dy="-7" text-anchor="middle">
+    <textPath href="#decompUp" startOffset="50%">Mineralization</textPath>
+  </text>
+  <text font-size="9" fill="#2A9D8F" dy="10" text-anchor="middle">
+    <textPath href="#decompUp" startOffset="50%">weeks to months</textPath>
+  </text>
+</g>
+
+<!-- N Pool → Denitrifying Bacteria — denitrification -->
+<g id="arrow-denitrify" class="clickable" onclick="showPopup('arrow-denitrification', event)">
+  <path class="arrow-line" d="M 462 438 L 510 608" stroke="#C8914A" stroke-width="2.5" fill="none" marker-end="url(#mA)"/>
+  <path class="arrow-hit"  d="M 462 438 L 510 608"/>
+  <text font-size="10" font-style="italic" fill="#C8914A" dy="-7" text-anchor="middle">
+    <textPath href="#denitrifyPath" startOffset="50%">Denitrification</textPath>
+  </text>
+  <text font-size="9" fill="#C8914A" dy="10" text-anchor="middle">
+    <textPath href="#denitrifyPath" startOffset="50%">NO&#x2083;&#x207B; → N&#x2082;</textPath>
+  </text>
+</g>
+
+<!-- Denitrifying Bacteria → N₂ Atmosphere — return arc -->
+<g id="arrow-return" class="clickable" onclick="showPopup('arrow-return', event)">
+  <path class="arrow-line" d="M 642 624 C 655 510 655 185 462 136" stroke="#C8914A" stroke-width="2" stroke-dasharray="8,4" fill="none" marker-end="url(#mA)"/>
+  <path class="arrow-hit"  d="M 642 624 C 655 510 655 185 462 136"/>
+  <text font-size="10" font-style="italic" fill="#C8914A" dy="-12" text-anchor="middle">
+    <textPath href="#deniArc" startOffset="68%">N&#x2082; returns to atmosphere</textPath>
+  </text>
+</g>
+
+<!-- ===================== LEGEND ===================== -->
+<rect x="30" y="680" width="618" height="44" rx="7" fill="white" stroke="#ddd" stroke-width="1"/>
+
+<line x1="42"  y1="696" x2="70"  y2="696" stroke="#2A9D8F" stroke-width="2.5"/>
+<polygon points="70,692.5 80,696 70,699.5" fill="#2A9D8F"/>
+<text x="85" y="700" font-size="9" fill="#444">Biological cycling</text>
+
+<line x1="215" y1="696" x2="243" y2="696" stroke="#C8914A" stroke-width="2.5"/>
+<polygon points="243,692.5 253,696 243,699.5" fill="#C8914A"/>
+<text x="258" y="700" font-size="9" fill="#444">Bacterial transformation (critical step)</text>
+
+<line x1="42"  y1="714" x2="70"  y2="714" stroke="#C8914A" stroke-width="2" stroke-dasharray="8,4"/>
+<polygon points="70,710.5 80,714 70,717.5" fill="#C8914A"/>
+<text x="85" y="718" font-size="9" fill="#444">N&#x2082; return to atmosphere</text>
+
+<!-- Tagline -->
+<text x="10" y="775" text-anchor="start" font-size="11" font-style="italic" fill="#888">Environmental Science through Nature's Genius</text>
+
+</svg>
+
+<!-- Popup -->
+<div id="popup">
+  <div id="popup-bar"></div>
+  <div id="popup-inner">
+    <div id="popup-header">
+      <span id="popup-title"></span>
+      <span id="popup-close" onclick="closePopup()">&#215;</span>
+    </div>
+    <p id="popup-content"></p>
+  </div>
+</div>
+
+</div>
+
+<script>
+const popupData = {
+
+  'node-atmosphere': {
+    color: '#5B8FA8',
+    title: 'A Paradox in Every Breath',
+    content: "Nitrogen makes up 78% of Earth's atmosphere, far more than any other gas. Yet almost none of it is directly available to living things. The nitrogen molecule (N₂) is held together by an exceptionally strong triple bond, requiring enormous energy to break. The result is a paradox: nitrogen is everywhere, yet nearly always out of reach.\n\nAll the nitrogen in proteins, DNA, and chlorophyll on Earth began its biological journey inside a bacterial cell that can break that bond. Without those bacteria, the atmospheric reservoir would be permanently locked."
+  },
+
+  'node-soilfixers': {
+    color: '#C8914A',
+    title: 'The Root Partnership',
+    content: "Soil bacteria, including those in root nodules of legumes, perform nitrogen fixation, one of the most energy-demanding reactions in biology. Using an enzyme called nitrogenase, they break N₂'s triple bond at ordinary temperatures and pressures.\n\nPlants supply these bacteria with sugars and receive usable nitrogen in return. This is why rotating crops with legumes restores soil fertility, a principle Indigenous agricultural systems, including the Three Sisters, applied for centuries."
+  },
+
+  'node-cyanobacteria': {
+    color: '#C8914A',
+    title: 'Fixing Nitrogen in the Open Ocean',
+    content: "Marine cyanobacteria such as Trichodesmium and Crocosphaera fix nitrogen in the open ocean, where nutrients are scarce and nitrogen often limits photosynthesis. Trichodesmium forms visible surface blooms across tropical seas and fixes an estimated 50–100 million metric tons of nitrogen per year.\n\nThese organisms face a particular challenge: nitrogenase is destroyed by oxygen, yet cyanobacteria photosynthesize and produce it. They solve this by fixing nitrogen in specialized cells or only at night, an elegant workaround to conflicting chemical requirements."
+  },
+
+  'node-npool': {
+    color: '#7A9A5C',
+    title: 'The Soil Nitrogen Pool',
+    content: "Before fixed nitrogen can reach plant roots, nitrifying bacteria convert ammonia first to nitrite, then to nitrate. This transformation produces forms of nitrogen that move freely through soil water where roots can intercept them.\n\nThe pool is in constant flux, with inputs from fixation and decomposition and losses through plant uptake and denitrification. Nitrate can also leach out of soil with water, carrying nitrogen into groundwater and streams. Its size at any moment shapes how productive an ecosystem can be."
+  },
+
+  'node-plants': {
+    color: '#2A9D8F',
+    title: 'Nitrogen at the Core of Every Cell',
+    content: "Nitrogen is the element most often limiting plant growth. Plants absorb ammonium and nitrate through specialized root proteins and convert them into amino acids, proteins, and nucleotides, the building blocks of every living cell.\n\nChlorophyll itself contains nitrogen, which is why nitrogen-starved plants turn yellow: they break down their own chlorophyll to recover nitrogen when none is available in soil. Many plants enhance nitrogen acquisition through mycorrhizal partnerships, extending their effective reach into soil volumes inaccessible to root hairs alone."
+  },
+
+  'node-animals': {
+    color: '#2A9D8F',
+    title: 'Nitrogen Borrowed from Food',
+    content: "Animals acquire all their nitrogen through food. They break down dietary proteins into amino acids, rebuild them into their own proteins, and excrete excess nitrogen as urea or uric acid, returning it to the soil.\n\nSome animals are key nitrogen vectors across ecosystems. Pacific salmon carry marine-derived nitrogen far inland when they spawn and die in freshwater rivers, fertilizing riverside forests with ocean nutrients. Seabirds concentrate marine nitrogen into coastal soils through guano."
+  },
+
+  'node-decomposers': {
+    color: '#2A9D8F',
+    title: 'Mineralization: Unlocking Organic Nitrogen',
+    content: "When organisms die, the nitrogen locked in their proteins does not disappear. Decomposers break proteins into amino acids, then into ammonium, a process called mineralization. The speed depends on the carbon-to-nitrogen ratio of the material: nitrogen-rich matter decomposes quickly, while woody material releases nitrogen slowly.\n\nDecomposers effectively control the rate at which nitrogen cycles back into the soil pool, shaping ecosystem productivity across timescales from weeks to centuries."
+  },
+
+  'node-denitrifiers': {
+    color: '#C8914A',
+    title: 'Completing the Cycle',
+    content: "Denitrifying bacteria convert nitrate back into N₂ gas in oxygen-poor environments such as wetlands, waterlogged soils, and deep ocean sediments, where they use nitrate instead of oxygen for respiration.\n\nDuring this process, they often produce nitrous oxide (N₂O), a greenhouse gas about 270 times more potent than CO₂ over a 100-year period. This links soil conditions and land use directly to atmospheric change."
+  },
+
+  'arrow-fixation': {
+    color: '#C8914A',
+    title: 'Nitrogen Fixation: Breaking the Triple Bond',
+    content: "Nitrogen fixation makes atmospheric N₂ available to living systems. The enzyme nitrogenase breaks the triple bond and converts nitrogen into ammonia, a process that requires large amounts of energy.\n\nOnly a small group of bacteria and archaea can perform this reaction. Their role is so essential that if all nitrogen fixers were removed from Earth's ecosystems, the nitrogen pool available to life would steadily decline over time."
+  },
+
+  'arrow-nitrification': {
+    color: '#2A9D8F',
+    title: 'Nitrification: Making Nitrogen Mobile',
+    content: "Nitrifying bacteria convert ammonia into nitrite and then nitrate. These transformations release energy that the bacteria use to grow.\n\nThis process produces mobile forms of nitrogen that move through soil water and can be absorbed by plants, which take up nitrogen primarily as ammonium or nitrate."
+  },
+
+  'arrow-plantuptake': {
+    color: '#2A9D8F',
+    title: 'Nitrogen Entering the Food Web',
+    content: "Plants absorb ammonium and nitrate through active transport proteins in root cell membranes, spending energy to move ions against concentration gradients. Once inside, nitrogen is assembled into amino acids using carbon skeletons from photosynthesis.\n\nThis is the moment nitrogen enters the food web. Every protein in every animal on Earth traces its nitrogen back through this step, with plant roots pulling ions from soil water and incorporating them into the molecules of life."
+  },
+
+  'arrow-consumption': {
+    color: '#2A9D8F',
+    title: 'Nitrogen Through Food Chains',
+    content: "When animals eat plants or other animals, nitrogen moves through food webs as proteins and nucleotides. At each step, animals use some nitrogen to build their own tissues and excrete the rest as urea or uric acid, returning it to the soil.\n\nUnlike carbon, nitrogen does not typically return to the atmosphere at each trophic step; it stays in biological circulation until denitrifying bacteria convert it back to N₂, allowing it to cycle through many organisms before finally leaving the food web."
+  },
+
+  'arrow-death': {
+    color: '#2A9D8F',
+    title: 'Returning Nitrogen to the Soil',
+    content: "When organisms die or excrete waste, their nitrogen enters the decomposer pathway in organic forms: proteins, urea, and nucleotides. The partially decomposed material that accumulates over time, called humus, holds nitrogen in stable forms that release slowly back into the soil pool. Globally, soil organic matter holds more nitrogen than the atmosphere.\n\nAnimal excretion returns nitrogen to soil throughout an organism's life, often in forms rapidly available to plants. Dead leaves and woody material cycle more slowly, sometimes persisting for years before decomposers fully mineralize their nitrogen content."
+  },
+
+  'arrow-mineralization': {
+    color: '#2A9D8F',
+    title: 'Mineralization: The Return Pathway',
+    content: "Decomposers convert organic nitrogen back to ammonium through mineralization, completing the biological loop. The rate of this process determines how quickly nitrogen becomes available again for plant growth.\n\nIn warm, moist tropical forests, mineralization happens so rapidly that little nitrogen accumulates in soil organic matter; most is held in living tissue at any moment. In cold or dry ecosystems, organic nitrogen can persist for centuries, creating peat and humus deposits that represent long-term nitrogen storage."
+  },
+
+  'arrow-denitrification': {
+    color: '#C8914A',
+    title: 'Denitrification: The Critical Exit',
+    content: "Denitrifying bacteria use nitrate as a substitute for oxygen during respiration, producing N₂ gas that escapes to the atmosphere. Without this step, nitrogen would accumulate in soils and water as nitrate, reaching concentrations that can disrupt ecosystems.\n\nNatural wetlands are among Earth's most important denitrification sites, helping remove excess nitrogen from water systems and limiting algal blooms. This service is lost when wetlands are drained."
+  },
+
+  'arrow-return': {
+    color: '#C8914A',
+    title: 'Closing the Cycle',
+    content: "The return of N₂ to the atmosphere closes the nitrogen cycle and maintains the atmospheric reservoir. The balance between fixation and denitrification has kept atmospheric nitrogen levels relatively stable over long timescales.\n\nThis balance emerges from the combined activity of many microbes responding to local conditions, showing how biological processes operating at the smallest scale shape chemistry at a global one."
+  }
+
+};
+
+function showPopup(id, event) {
+  event.stopPropagation();
+  const data = popupData[id];
+  if (!data) return;
+
+  document.getElementById('popup-bar').style.background = data.color;
+  document.getElementById('popup-title').textContent = data.title;
+  const contentEl = document.getElementById('popup-content');
+  contentEl.innerHTML = data.content
+    .split('\n\n')
+    .map(p => `<p style="margin-bottom:7px">${p}</p>`)
+    .join('');
+
+  const popup = document.getElementById('popup');
+  const container = document.getElementById('diagram-container');
+  const cRect = container.getBoundingClientRect();
+
+  let x = event.clientX - cRect.left;
+  let y = event.clientY - cRect.top;
+
+  const pw = 262, ph = 200;
+  x = (x + pw + 18 > cRect.width) ? x - pw - 12 : x + 14;
+  y = Math.max(6, Math.min(y - 20, cRect.height - ph - 6));
+
+  popup.style.left = x + 'px';
+  popup.style.top  = y + 'px';
+  popup.style.display = 'block';
+}
+
+function closePopup() {
+  document.getElementById('popup').style.display = 'none';
+}
+
+document.getElementById('diagram-container').addEventListener('click', function(e) {
+  const popup = document.getElementById('popup');
+  if (popup.style.display !== 'none' && !popup.contains(e.target)) {
+    closePopup();
+  }
+});
+</script>
+</body>
+</html>
